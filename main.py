@@ -1,199 +1,178 @@
+# main.py
 import telebot
 from telebot import types
 import sqlite3
-import random
-import time
-import threading
-from flask import Flask
 
-# ================== تنظیمات اصلی ==================
-TOKEN = "8052676038:AAHDCoH_xWSUjmI-jhjQMxeow0EWc-lcXQ0"
+# =============================
+# تنظیمات اصلی
+TOKEN = '8052676038:AAHDCoH_xWSUjmI-jhjQMxeow0EWc-lcXQ0'
 ADMIN_ID = 647634331
+GROUP_ID = "@Game_Center_Gap1"  # یوزرنیم گروه
 
 bot = telebot.TeleBot(TOKEN)
-app = Flask(__name__)
 
-# ================== سرور برای آنلاین موندن ==================
-@app.route('/')
-def home():
-    return "Bot is alive!"
-
-def run_flask():
-    app.run(host="0.0.0.0", port=8080)
-
-threading.Thread(target=run_flask).start()
-
-# ================== دیتابیس ==================
-conn = sqlite3.connect("game.db", check_same_thread=False)
+# =============================
+# دیتابیس
+conn = sqlite3.connect('db.sqlite3', check_same_thread=False)
 c = conn.cursor()
 
 c.execute("""
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS countries (
     user_id INTEGER PRIMARY KEY,
     username TEXT,
-    country TEXT,
+    country_name TEXT,
     gold INTEGER,
     food INTEGER,
     wood INTEGER,
+    population INTEGER,
     soldiers INTEGER,
-    dragons INTEGER,
-    dragon_building INTEGER
+    archers INTEGER,
+    knights INTEGER,
+    giants INTEGER,
+    heavy_cavalry INTEGER,
+    catapults INTEGER,
+    ballistas INTEGER,
+    dragons INTEGER
 )
 """)
-
 conn.commit()
 
-# ================== کشورها ==================
-COUNTRIES = {
-    "هخامنشیان": "تولید طلا +۶۰٪",
-    "روم باستان": "قدرت ارتش بالا",
-    "مغول‌ها": "غارت قوی",
-    "سامورایی": "دفاع عالی",
-    "وایکینگ": "حمله سریع"
-}
+# =============================
+# توابع کمکی
+def get_user(user_id):
+    c.execute("SELECT * FROM countries WHERE user_id=?", (user_id,))
+    return c.fetchone()
 
-# ================== شروع ==================
+def is_member(user_id):
+    try:
+        member = bot.get_chat_member(GROUP_ID, user_id)
+        return member.status != 'left'
+    except:
+        return False
+
+# =============================
+# /start
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
-    username = message.from_user.username or "بی‌نام"
 
-    c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    if not c.fetchone():
-        c.execute(
-            "INSERT INTO users VALUES (?,?,?,?,?,?,?,?,?)",
-            (user_id, username, None, 500, 500, 500, 10, 0, 0)
-        )
-        conn.commit()
-
-    bot.send_message(
-        message.chat.id,
-        "👑 به بازی امپراتوری خوش آمدی!\n"
-        "کشور را ادمین تعیین می‌کند.\n"
-        "دستورها:\n"
-        "/status\n"
-        "/countries\n"
-        "/attack\n"
-        "/train_dragon"
-    )
-
-# ================== وضعیت ==================
-@bot.message_handler(commands=['status'])
-def status(message):
-    user_id = message.from_user.id
-    c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    u = c.fetchone()
-
-    if not u:
-        return
-
-    text = (
-        f"👤 کاربر: @{u[1]}\n"
-        f"🏳 کشور: {u[2]}\n"
-        f"💰 طلا: {u[3]}\n"
-        f"🍖 غذا: {u[4]}\n"
-        f"🌲 چوب: {u[5]}\n"
-        f"⚔️ سرباز: {u[6]}\n"
-        f"🐉 اژدها: {u[7]}\n"
-        f"🏰 ساختمان اژدها: {u[8]}"
-    )
-
-    bot.send_message(message.chat.id, text)
-
-# ================== نمایش کشورها ==================
-@bot.message_handler(commands=['countries'])
-def show_countries(message):
-    text = "🌍 کشورها:\n\n"
-    for k, v in COUNTRIES.items():
-        text += f"🏳 {k} → {v}\n"
-
-    text += "\n❗ انتخاب کشور فقط توسط ادمین است."
-    bot.send_message(message.chat.id, text)
-
-# ================== انتخاب کشور (ادمین) ==================
-@bot.message_handler(commands=['setcountry'])
-def set_country(message):
-    if message.from_user.id != ADMIN_ID:
-        return
-
-    try:
-        _, user_id, country = message.text.split(maxsplit=2)
-        user_id = int(user_id)
-
-        if country not in COUNTRIES:
-            bot.send_message(message.chat.id, "❌ کشور نامعتبر است")
-            return
-
-        c.execute("UPDATE users SET country=? WHERE user_id=?", (country, user_id))
-        conn.commit()
-
-        bot.send_message(message.chat.id, "✅ کشور با موفقیت ثبت شد")
-
-    except:
+    if not is_member(user_id):
         bot.send_message(
             message.chat.id,
-            "فرمت:\n/setcountry USER_ID نام_کشور"
+            f"❌ اول باید عضو گروه بشی:\n{GROUP_ID}"
         )
-
-# ================== آموزش اژدها ==================
-@bot.message_handler(commands=['train_dragon'])
-def train_dragon(message):
-    user_id = message.from_user.id
-    c.execute("SELECT gold,food,wood,dragons FROM users WHERE user_id=?", (user_id,))
-    u = c.fetchone()
-
-    if not u:
         return
 
-    gold, food, wood, dragons = u
+    if get_user(user_id):
+        bot.send_message(message.chat.id, "✅ قبلاً ثبت‌نام کرده‌ای.")
+        return
 
-    if gold >= 3000 and food >= 2000 and wood >= 1500:
-        c.execute("""
-        UPDATE users SET
-        gold=gold-3000,
-        food=food-2000,
-        wood=wood-1500,
-        dragons=dragons+1
-        WHERE user_id=?
-        """, (user_id,))
-        conn.commit()
+    c.execute("""
+    INSERT INTO countries VALUES (
+        ?, ?, ?, 1000, 1000, 1000, 10,
+        0, 0, 0, 0, 0, 0, 0, 0
+    )
+    """, (
+        user_id,
+        message.from_user.username,
+        "کشور تازه"
+    ))
+    conn.commit()
 
-        bot.send_message(message.chat.id, "🐉 اژدها با موفقیت آموزش داده شد!")
-    else:
-        bot.send_message(message.chat.id, "❌ منابع کافی نیست")
+    bot.send_message(message.chat.id, "🎉 ثبت‌نام انجام شد!")
 
-# ================== حمله PVP ==================
-@bot.message_handler(commands=['attack'])
-def attack(message):
-    user_id = message.from_user.id
+# =============================
+# /status
+@bot.message_handler(commands=['status'])
+def status(message):
+    data = get_user(message.from_user.id)
+    if not data:
+        bot.send_message(message.chat.id, "❌ ثبت‌نام نکرده‌ای.")
+        return
 
+    text = f"""
+🏰 کشور: {data[2]}
+💰 طلا: {data[3]}
+🍎 غذا: {data[4]}
+🪵 چوب: {data[5]}
+👥 جمعیت: {data[6]}
+⚔️ سرباز: {data[7]}
+🏹 کماندار: {data[8]}
+🐴 شوالیه: {data[9]}
+🐉 اژدها: {data[14]}
+"""
+    bot.send_message(message.chat.id, text)
+
+# =============================
+# /train
+@bot.message_handler(commands=['train'])
+def train(message):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton("سرباز +10", callback_data="soldier"),
+        types.InlineKeyboardButton("کماندار +5", callback_data="archer"),
+        types.InlineKeyboardButton("شوالیه +2", callback_data="knight")
+    )
+    bot.send_message(message.chat.id, "چی آموزش بدم؟", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
+    user_id = call.from_user.id
+    data = get_user(user_id)
+    if not data:
+        return
+
+    data = list(data)
+
+    if call.data == "soldier":
+        data[7] += 10
+    elif call.data == "archer":
+        data[8] += 5
+    elif call.data == "knight":
+        data[9] += 2
+
+    c.execute("""
+    UPDATE countries SET
+    soldiers=?, archers=?, knights=?
+    WHERE user_id=?
+    """, (data[7], data[8], data[9], user_id))
+    conn.commit()
+
+    bot.answer_callback_query(call.id, "✅ انجام شد")
+
+# =============================
+# دستورات ادمین برای دادن منابع یا ارتش (اختیاری)
+@bot.message_handler(commands=['give_resources'])
+def give_resources(message):
+    if message.from_user.id != ADMIN_ID:
+        return
     try:
-        _, target_id = message.text.split()
-        target_id = int(target_id)
-    except:
-        bot.send_message(message.chat.id, "فرمت:\n/attack USER_ID")
-        return
-
-    c.execute("SELECT soldiers,dragons FROM users WHERE user_id=?", (user_id,))
-    a = c.fetchone()
-    c.execute("SELECT soldiers,dragons FROM users WHERE user_id=?", (target_id,))
-    d = c.fetchone()
-
-    if not a or not d:
-        bot.send_message(message.chat.id, "❌ بازیکن پیدا نشد")
-        return
-
-    power_a = a[0] + a[1]*50
-    power_d = d[0] + d[1]*50
-
-    if power_a > power_d:
-        gold_win = random.randint(100,300)
-        c.execute("UPDATE users SET gold=gold+? WHERE user_id=?", (gold_win, user_id))
+        parts = message.text.split()
+        user_id = int(parts[1])
+        gold = int(parts[2])
+        food = int(parts[3])
+        wood = int(parts[4])
+        data = get_user(user_id)
+        if not data:
+            bot.reply_to(message, "کاربر یافت نشد!")
+            return
+        updated = list(data)
+        updated[3] += gold
+        updated[4] += food
+        updated[5] += wood
+        c.execute("""
+        UPDATE countries SET
+        username=?, country_name=?, gold=?, food=?, wood=?, population=?,
+        soldiers=?, archers=?, knights=?, giants=?, heavy_cavalry=?, catapults=?, ballistas=?, dragons=?
+        WHERE user_id=?
+        """, (updated[1], updated[2], updated[3], updated[4], updated[5],
+              updated[6], updated[7], updated[8], updated[9], updated[10], updated[11], updated[12], updated[13], updated[14], user_id))
         conn.commit()
-        bot.send_message(message.chat.id, f"🔥 پیروزی! {gold_win} طلا غارت شد")
-    else:
-        bot.send_message(message.chat.id, "❌ حمله شکست خورد")
+        bot.reply_to(message, f"پک منابع به {data[1]} داده شد!")
+    except:
+        bot.reply_to(message, "فرمت دستور درست نیست. مثال: /give_resources 123456789 5000 3000 2000")
 
-# ================== اجرا ==================
-print("Bot is running...")
+# =============================
+print("بات افسانه‌ای آماده است! 🐉⚔️")
 bot.infinity_polling()
+        
